@@ -1,0 +1,11 @@
+# PHP2Shell interim FrankenPHP mitigation (CVE-2026-109618 / CVE-2026-109619).
+# Disables the upload-progress handler at the embedded-PHP level.
+# STOPGAP only — upgrade to a patched PHP build.
+#
+# Place inside the global options block of your Caddyfile:
+
+{
+    frankenphp {
+        php_ini session.upload_progress.enabled 0
+    }
+}

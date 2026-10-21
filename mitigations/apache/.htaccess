@@ -1,0 +1,14 @@
+# PHP2Shell interim .htaccess mitigation (CVE-2026-109618 / CVE-2026-109619).
+# For directories that do NOT need file uploads. STOPGAP only — patch PHP.
+#
+# Denies multipart uploads, which are the known trigger surface.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_METHOD} ^(POST|PUT|PATCH)$ [NC]
+    RewriteCond %{HTTP:Content-Type} multipart/form-data [NC]
+    RewriteRule ^ - [F,L]
+</IfModule>
+
+# Fallback if mod_rewrite is unavailable: block the trigger field name via
+# mod_security (see ../apache-modsecurity.conf) instead.

@@ -1,0 +1,30 @@
+# Isolated PHP2Shell test lab.
+#
+# Purpose: let you validate the DETECTION and MITIGATION pieces of this toolkit
+# against a deliberately unpatched PHP, on your own machine, with no route to
+# the internet. It brings up an old PHP so check_php2shell.* reports VULNERABLE
+# and you can confirm your WAF rules and log signals fire.
+#
+# It intentionally does NOT ship exploit code.
+#
+#   docker compose up -d
+#   docker compose exec php php -v        # confirm the unpatched version
+#   python3 ../detect/check_php2shell.py --url http://localhost:8088
+#   docker compose down
+#
+# Keep this on an isolated host. Do not expose port 8088 beyond localhost.
+
+services:
+  php:
+    image: php:8.3.0-apache   # deliberately pre-fix for testing; do NOT deploy
+    container_name: php2shell-lab
+    ports:
+      - "127.0.0.1:8088:80"   # bound to loopback only
+    networks:
+      - lab
+    restart: "no"
+
+networks:
+  lab:
+    driver: bridge
+    internal: true            # no outbound internet from the lab network
