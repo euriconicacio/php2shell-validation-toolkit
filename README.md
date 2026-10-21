@@ -43,7 +43,10 @@ are still settling across advisories; defer to the official PHP advisory.
 ## What's here
 
 ```
-exposure/        Safe exposure checker + fleet scanner (version/config, header-only remote)
+exposure/      Checkers + scanners (see exposure/README.md):
+   check_php2shell.py/.sh     passive version/config audit + header-only remote
+   scan_fleet.py              header-only version sweep across many hosts
+   php2shell_scan.py          active, non-destructive validator (authorized only)
 mitigations/   Interim hardening across the stack:
    php.ini.hardening.ini      disable upload-progress + error/memory notes
    quick-fix/run.sh           check / dry-run / apply / revert the config mitigation
