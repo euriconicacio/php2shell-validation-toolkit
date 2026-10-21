@@ -15,9 +15,13 @@ remote-code-execution exploit.
 
 ## Scope of the tools
 
-- `exposure/` performs version and configuration checks and header-only remote
-  fingerprinting. It sends no exploit payloads and never touches the vulnerable
-  code path.
+- `exposure/check_php2shell.*` and `exposure/scan_fleet.py` perform version
+  and configuration checks and header-only remote fingerprinting. They send no
+  exploit payloads and never touch the vulnerable code path.
+- `exposure/php2shell_scan.py` is active: it sends small multipart requests
+  carrying the upload-progress field, and can write an inert text canary into a
+  session file. It sends nothing that drives PHP out of memory or triggers
+  either CVE, and runs only with `--authorized`.
 - `mitigations/` and `hunting/` are configuration and monitoring guidance.
 - `lab/` is a deliberately unpatched target for validating the defensive pieces,
   not an exploitation tutorial.

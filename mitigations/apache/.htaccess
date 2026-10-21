@@ -10,5 +10,5 @@
     RewriteRule ^ - [F,L]
 </IfModule>
 
-# Fallback if mod_rewrite is unavailable: block the trigger field name via
-# mod_security (see ../apache-modsecurity.conf) instead.
+# Fallback if mod_rewrite is unavailable: block the upload-progress field name
+# with ModSecurity instead (see modsecurity-php2shell.conf in this directory).

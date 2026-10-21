@@ -34,7 +34,10 @@ Then review with `ausearch -k php_worker_exec` and alert on shells/interpreters.
 ## Memory and stability signals
 
 - PHP worker segfaults (`SIGSEGV`, "child exited on signal 11" in FPM logs).
-- Unusual RSS growth or OOM kills on PHP hosts (the trigger involves OOM).
+- Unusual RSS growth or OOM kills on PHP hosts (CVE-2026-109618 is driven by
+  running a request out of memory).
+- On patched builds: `Hard memory limit of … bytes exhausted` on stderr and
+  workers exiting with status 137 (see `log-and-ids-detection.md`).
 - Repeated worker restarts correlated with multipart POST bursts.
 
 ## Correlate with the web tier

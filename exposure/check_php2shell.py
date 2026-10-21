@@ -7,9 +7,12 @@ This tool does NOT exploit anything. It answers one question:
 "Is this PHP install exposed to PHP2Shell?"
 
 It does so by:
-  1. Reading the local PHP version and comparing it to the fixed releases.
-  2. Auditing the runtime configuration that influences the vulnerable paths
-     (session.upload_progress.*, memory_limit).
+  1. Reading the local PHP version and comparing it to the fixed releases, and
+     checking for memory_hard_limit_percent, an INI setting that only exists in
+     builds carrying the fix (so distribution backports that keep an old
+     version number are recognized as patched).
+  2. Auditing the runtime configuration behind the known routes
+     (session.upload_progress.enabled, fatal_error_backtraces, memory_limit).
   3. (Optional) Fingerprinting a remote host's advertised PHP version from
      response headers only — no payloads, no requests that touch the
      vulnerable code path.
@@ -26,7 +29,8 @@ import sys
 from dataclasses import dataclass
 
 # First patched release per supported branch. Anything below these on the
-# same branch is vulnerable. Branches <= 8.1 are end-of-life (no backport).
+# same branch is vulnerable unless the build carries a backport of the fix.
+# Branches <= 8.1 are end-of-life: no release (7.4-8.1 have source backports).
 FIXED = {
     (8, 2): (8, 2, 35),
     (8, 3): (8, 3, 36),
@@ -34,7 +38,11 @@ FIXED = {
     (8, 5): (8, 5, 12),
 }
 
-EOL_CEILING = (8, 1)  # 8.1.x and older: EOL, no official fix.
+EOL_CEILING = (8, 1)  # 8.1.x and older: EOL, no release.
+
+# INI directive added by the fix (php/php-src@31c0ea7d7). ini_get() returns
+# False when the directive does not exist, i.e. on builds without the fix.
+FIX_MARKER = "memory_hard_limit_percent"
 
 
 @dataclass
@@ -55,10 +63,14 @@ def judge_version(ver: tuple[int, int, int]) -> Verdict:
     branch = (major, minor)
 
     if major < 8 or branch <= EOL_CEILING:
+        advice = ("PHP published minimal source backports for 7.4-8.1: check "
+                  "your distribution / LTS vendor, or upgrade to a supported, "
+                  "patched branch."
+                  if (major, minor) >= (7, 4) else
+                  "No fix from PHP: upgrade to a supported, patched branch.")
         return Verdict(
             "VULNERABLE",
-            f"PHP {major}.{minor}.{patch} is end-of-life. No official fix. "
-            f"Upgrade to a supported, patched branch.",
+            f"PHP {major}.{minor}.{patch} is end-of-life with no release. {advice}",
         )
     if branch in FIXED:
         if ver < FIXED[branch]:
@@ -96,14 +108,25 @@ def local_php_version() -> tuple[int, int, int] | None:
 
 
 def php_ini_value(name: str) -> str | None:
+    """Return the CLI's value for an INI directive, "" when empty,
+    "<missing>" when the directive does not exist, None without a PHP CLI."""
     try:
         out = subprocess.run(
-            ["php", "-r", f"echo ini_get({name!r});"],
+            ["php", "-r",
+             f"$v = ini_get({name!r}); echo $v === false ? '<missing>' : $v;"],
             capture_output=True, text=True, timeout=10, check=False,
         ).stdout.strip()
     except (FileNotFoundError, subprocess.SubprocessError):
         return None
     return out
+
+
+def has_fix_marker() -> bool | None:
+    """True if the local build has the INI directive the fix introduced."""
+    v = php_ini_value(FIX_MARKER)
+    if v is None:
+        return None
+    return v != "<missing>"
 
 
 def audit_config() -> list[str]:
@@ -115,20 +138,45 @@ def audit_config() -> list[str]:
         notes.append("Could not read session.upload_progress.enabled (no PHP CLI?).")
     elif upload_progress in ("1", "on", "On", "true"):
         notes.append(
-            "session.upload_progress.enabled is ON (default). This feeds the "
-            "upload-progress path tied to CVE-2026-109618. Patch; as an interim "
-            "mitigation set it to 0 in php.ini / the FPM pool (NOT .user.ini — "
-            "that is parsed too late)."
+            "session.upload_progress.enabled is ON (default). This is the "
+            "session case of CVE-2026-109619. Interim stopgap: set it to 0 in "
+            "php.ini / the FPM pool (NOT .user.ini, which is applied too late)."
         )
     else:
-        notes.append("session.upload_progress.enabled is OFF (interim mitigation in place).")
+        notes.append("session.upload_progress.enabled is OFF (stopgap for the "
+                     "CVE-2026-109619 session case in place).")
+
+    backtraces = php_ini_value("fatal_error_backtraces")
+    if backtraces not in (None, "<missing>"):
+        if backtraces in ("1", "on", "On", "true"):
+            notes.append(
+                "fatal_error_backtraces is ON (PHP 8.5 default). This is the "
+                "producer behind the confirmed CVE-2026-109619 RCE. Interim "
+                "stopgap: set it to 0 administratively."
+            )
+        else:
+            notes.append("fatal_error_backtraces is OFF (stopgap for the "
+                         "CVE-2026-109619 backtrace case in place).")
 
     mem = php_ini_value("memory_limit")
     if mem is not None:
-        notes.append(
-            f"memory_limit = {mem}. The OOM-driven path (CVE-2026-109618) is "
-            f"influenced by memory pressure; this is informational, not a fix."
-        )
+        if mem == "-1":
+            notes.append(
+                "memory_limit = -1 (PHP's stopgap for CVE-2026-109618 in place; "
+                "not complete, and one request can now exhaust RAM: keep a "
+                "container/cgroup limit and restore a finite limit after patching)."
+            )
+        else:
+            notes.append(
+                f"memory_limit = {mem}. A finite per-request limit is what the "
+                f"confirmed CVE-2026-109618 exploit drives requests into. PHP's "
+                f"stopgap is memory_limit = -1, with a DoS cost; see "
+                f"mitigations/php.ini.hardening.ini."
+            )
+    notes.append(
+        "These values come from the PHP CLI. PHP-FPM pools and Apache can load "
+        "different settings: confirm them where they are defined."
+    )
     return notes
 
 
@@ -196,7 +244,23 @@ def main() -> int:
         print("[UNKNOWN] No local PHP CLI found. Pass --version or --url.")
         return 2
     v = judge_version(ver)
-    print(f"[{v.status}] Local PHP: {v.detail}\n")
+    marker = has_fix_marker()
+    if marker and v.status == "VULNERABLE":
+        v = Verdict(
+            "PATCHED",
+            f"PHP {'.'.join(map(str, ver))} carries the fix as a backport: "
+            f"{FIX_MARKER} exists, and it only exists in fixed builds.",
+        )
+    elif marker is False and v.status == "PATCHED":
+        v = Verdict(
+            "UNKNOWN",
+            f"{v.detail} But {FIX_MARKER} is missing, which fixed builds have. "
+            f"Check how this PHP was built.",
+        )
+    print(f"[{v.status}] Local PHP: {v.detail}")
+    if marker is not None:
+        print(f"  Fix marker {FIX_MARKER}: {'present' if marker else 'absent'}")
+    print()
     print("Configuration audit:")
     for note in audit_config():
         print(f"  - {note}")

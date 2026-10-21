@@ -32,34 +32,63 @@ case "${MAJOR}.${MINOR}" in
   8.5) [ "${PATCH:-0}" -lt "$FIXED_8_5" ] && verdict="VULNERABLE" || verdict="PATCHED" ;;
   *)
     if [ "${MAJOR}" -lt 8 ] || { [ "${MAJOR}" -eq 8 ] && [ "${MINOR}" -le 1 ]; }; then
-      verdict="VULNERABLE"  # EOL, no official fix
-      echo "[VULNERABLE] PHP ${VER} is end-of-life. No official patch. Upgrade."
+      verdict="VULNERABLE"  # EOL, no release
     else
       echo "[UNKNOWN] No fixed-release data for branch ${MAJOR}.${MINOR}. Check the PHP advisory."
     fi
     ;;
 esac
 
+# memory_hard_limit_percent only exists in builds carrying the fix
+# (php/php-src@31c0ea7d7); ini_get() returns false where it does not exist.
+MARKER="$(php -r 'echo ini_get("memory_hard_limit_percent") === false ? "absent" : "present";' 2>/dev/null || echo '?')"
+if [ "$verdict" = "VULNERABLE" ] && [ "$MARKER" = "present" ]; then
+  verdict="BACKPORT"
+elif [ "$verdict" = "PATCHED" ] && [ "$MARKER" = "absent" ]; then
+  verdict="UNKNOWN"
+  echo "[UNKNOWN] PHP ${VER} is at or above the fixed release, but the fix marker"
+  echo "          memory_hard_limit_percent is missing. Check how this PHP was built."
+fi
+
 case "$verdict" in
+  BACKPORT)
+    echo "[PATCHED] PHP ${VER} carries the fix as a backport: memory_hard_limit_percent"
+    echo "          exists, and it only exists in fixed builds."
+    verdict="PATCHED"
+    ;;
   VULNERABLE)
     if [ "${MAJOR}.${MINOR}" = "8.2" ] || [ "${MAJOR}.${MINOR}" = "8.3" ] || \
        [ "${MAJOR}.${MINOR}" = "8.4" ] || [ "${MAJOR}.${MINOR}" = "8.5" ]; then
       echo "[VULNERABLE] PHP ${VER} is below the fixed release for its branch. Update now."
+    elif [ "${MAJOR}" -gt 7 ] || { [ "${MAJOR}" -eq 7 ] && [ "${MINOR}" -ge 4 ]; }; then
+      echo "[VULNERABLE] PHP ${VER} is end-of-life with no release. PHP published minimal"
+      echo "             source backports for 7.4-8.1: check your distribution / LTS vendor."
+    else
+      echo "[VULNERABLE] PHP ${VER} is end-of-life. No fix from PHP. Upgrade the branch."
     fi
     ;;
   PATCHED) echo "[PATCHED] PHP ${VER} is at or above the fixed release for its branch." ;;
 esac
 
+echo "  Fix marker memory_hard_limit_percent: ${MARKER}"
 echo
-echo "Configuration audit:"
+echo "Configuration audit (PHP CLI values; FPM pools and Apache may differ):"
 UP="$(php -r 'echo ini_get("session.upload_progress.enabled");' 2>/dev/null || echo '?')"
 if [ "$UP" = "1" ]; then
-  echo "  - session.upload_progress.enabled is ON (default) -> feeds the CVE-2026-109618 path."
-  echo "    Interim mitigation: set it to 0 in php.ini or the FPM pool (NOT .user.ini)."
+  echo "  - session.upload_progress.enabled is ON (default) -> session case of CVE-2026-109619."
+  echo "    Interim stopgap: set it to 0 in php.ini or the FPM pool (NOT .user.ini)."
 else
-  echo "  - session.upload_progress.enabled = '${UP}' (0/empty = interim mitigation in place)."
+  echo "  - session.upload_progress.enabled = '${UP}' (0/empty = stopgap in place)."
+fi
+BT="$(php -r '$v = ini_get("fatal_error_backtraces"); echo $v === false ? "n/a" : $v;' 2>/dev/null || echo '?')"
+if [ "$BT" = "1" ]; then
+  echo "  - fatal_error_backtraces is ON (PHP 8.5 default) -> backtrace case of CVE-2026-109619."
+  echo "    Interim stopgap: set it to 0 administratively."
+elif [ "$BT" != "n/a" ]; then
+  echo "  - fatal_error_backtraces = '${BT}' (0/empty = stopgap in place)."
 fi
 MEM="$(php -r 'echo ini_get("memory_limit");' 2>/dev/null || echo '?')"
-echo "  - memory_limit = ${MEM} (informational; patching is the only real fix)."
+echo "  - memory_limit = ${MEM} (PHP's stopgap for CVE-2026-109618 is -1, with a DoS cost;"
+echo "    see mitigations/php.ini.hardening.ini)."
 
 [ "$verdict" = "PATCHED" ] && exit 0 || exit 1

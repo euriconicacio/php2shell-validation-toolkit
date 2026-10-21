@@ -2,10 +2,12 @@
 # quick-fix/run.sh — PHP2Shell interim mitigation helper
 # (CVE-2026-109618 / CVE-2026-109619).
 #
-# Disables session.upload_progress.enabled, the directive that feeds the
-# upload-progress use-after-free path, by dropping a dedicated .ini file.
-# This is a STOPGAP. The only complete fix is upgrading PHP to
-# 8.2.35 / 8.3.36 / 8.4.27 / 8.5.12 (or later on that branch).
+# Disables session.upload_progress.enabled by dropping a dedicated .ini file.
+# This removes one route, the session upload-progress case of CVE-2026-109619.
+# It does not cover CVE-2026-109618 or the PHP 8.5 fatal_error_backtraces case;
+# see ../php.ini.hardening.ini for those. This is a STOPGAP. The only complete
+# fix is upgrading PHP to 8.2.35 / 8.3.36 / 8.4.27 / 8.5.12 (or later on that
+# branch).
 #
 # Usage:
 #   sudo ./run.sh --check       # report current state, change nothing
@@ -109,6 +111,7 @@ case "$MODE" in
     warn "Reload PHP for changes to take effect, e.g.:"
     warn "    systemctl reload 'php*-fpm'   OR   systemctl restart apache2"
     warn "Then re-run: ../../exposure/check_php2shell.sh"
+    warn "This covers one route only; see ../php.ini.hardening.ini for the others."
     ;;
   revert)
     for d in "${DIRS[@]}"; do
