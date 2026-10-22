@@ -31,11 +31,15 @@ case "${MAJOR}.${MINOR}" in
   8.4) [ "${PATCH:-0}" -lt "$FIXED_8_4" ] && verdict="VULNERABLE" || verdict="PATCHED" ;;
   8.5) [ "${PATCH:-0}" -lt "$FIXED_8_5" ] && verdict="VULNERABLE" || verdict="PATCHED" ;;
   *)
-    if [ "${MAJOR}" -lt 8 ] || { [ "${MAJOR}" -eq 8 ] && [ "${MINOR}" -le 1 ]; }; then
-      # Includes pre-5.4: the session route (109619) is absent there, but the
-      # CVE-2026-109618 OOM/bailout preconditions are present in the 5.3 source
-      # (verified in rfc1867.c + zend_alloc.c), so treat as vulnerable.
-      verdict="VULNERABLE"  # EOL, no release
+    if [ "${MAJOR}" -lt 7 ]; then
+      # CVE-2026-109618's corruption primitive is the PHP 7.0+ zend_array
+      # HashTable (nNumUsed/arData, walked by zend_array_destroy); it does not
+      # exist before 7.0. 109619's upload_progress trigger is 5.4+. So a build
+      # below 7.0 is not affected by the known 109618 vector on version alone.
+      # See docs/affected-versions.md and lab/reproduction-php-5.3.15/.
+      verdict="NOT-AFFECTED"
+    elif [ "${MAJOR}" -lt 8 ] || { [ "${MAJOR}" -eq 8 ] && [ "${MINOR}" -le 1 ]; }; then
+      verdict="VULNERABLE"  # 7.0-8.1: affected, EOL, no release
     else
       echo "[UNKNOWN] No fixed-release data for branch ${MAJOR}.${MINOR}. Check the PHP advisory."
     fi
@@ -71,6 +75,12 @@ case "$verdict" in
     fi
     ;;
   PATCHED) echo "[PATCHED] PHP ${VER} is at or above the fixed release for its branch." ;;
+  NOT-AFFECTED)
+    echo "[NOT-AFFECTED] PHP ${VER} is below the CVE-2026-109618 floor (PHP 7.0, where the"
+    echo "               zend_array HashTable primitive begins); not affected by the known"
+    echo "               109618 vector on version alone. End-of-life regardless — migrate."
+    echo "               For 5.4+, 109619 depends on session.upload_progress (see below)."
+    ;;
 esac
 
 echo "  Fix marker memory_hard_limit_percent: ${MARKER}"
@@ -97,6 +107,6 @@ echo "  - memory_limit = ${MEM} (PHP's stopgap for CVE-2026-109618 is -1, with a
 echo "    see mitigations/php.ini.hardening.ini)."
 
 case "$verdict" in
-  PATCHED) exit 0 ;;
-  *)       exit 1 ;;
+  PATCHED|NOT-AFFECTED) exit 0 ;;
+  *)                    exit 1 ;;
 esac

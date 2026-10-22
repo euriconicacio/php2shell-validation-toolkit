@@ -1,0 +1,23 @@
+# Code-level findings (php-5.3.15 vs php-5.4.0 vs fix 31c0ea7d7)
+
+## OOM routes in main/rfc1867.c, normalized (TSRM + whitespace stripped), 5.3.15 vs 5.4.0:
+  fill_buffer                  IDENTICAL
+  multipart_buffer_read_body   IDENTICAL
+  multipart_buffer_headers     DIFFERS
+  (multipart_buffer_headers differs only by a multibyte-encoding detection
+   line that 5.4.0 has in ADDITION; the vulnerable estrdup-per-header loop is the same.)
+
+## OOM -> zend_bailout present (Zend/zend_alloc.c):
+  php-5.3.15   zend_bailout in zend_mm_safe_error: 1
+  php-5.4.0    zend_bailout in zend_mm_safe_error: 1
+
+## CVE-2026-109619 confirmed routes absent in 5.3.15:
+  php-5.3.15   session.upload_progress occurrences: 0 (absent)
+  php-5.4.0    session.upload_progress occurrences: 9
+  fatal_error_backtraces: 8.5-only (not in 5.x).
+
+## mod_php runs shutdown after a parse-time bailout (sapi/apache2handler/sapi_apache2.c, php-5.3.15):
+  php_handler wraps work in zend_first_try { ... } zend_end_try();
+  ctor failure -> zend_bailout(); the bailout is caught, and php_apache_request_dtor
+  (-> php_request_shutdown) runs afterwards. Lines (ctor 472, startup 504, shutdown 509,
+  handler 538, bailout-on-ctor ~620/631, dtor after end_try ~678).

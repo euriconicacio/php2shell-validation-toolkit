@@ -1,0 +1,40 @@
+# CVE-2026-109618 consumption primitive is PHP 7+ internals; PHP 5.3.15 lacks it
+
+The actual corruption primitive (per Calif's write-up, calif.io/php2shell):
+  _zend_hash_str_add_or_update_i increments nNumUsed/nNumOfElements BEFORE
+  zend_string_init(); on OOM bailout the bucket is half-built, and
+  zend_array_destroy() walks up to nNumUsed and treats the dead bucket as live.
+  Trigger+consumer both require: a flat arData bucket array, an nNumUsed
+  high-water counter, zend_string, and zend_array_destroy() -- all PHP 7+.
+
+## HashTable in PHP 5.3.15 (Zend/zend_hash.h): linked-list of separately
+## allocated Buckets; NO nNumUsed, NO flat arData.
+typedef struct _hashtable {
+	uint nTableSize;
+	uint nTableMask;
+	uint nNumOfElements;
+	ulong nNextFreeElement;
+	Bucket *pInternalPointer;	/* Used for element traversal */
+	Bucket *pListHead;
+	Bucket *pListTail;
+	Bucket **arBuckets;
+	dtor_func_t pDestructor;
+	zend_bool persistent;
+	unsigned char nApplyCount;
+	zend_bool bApplyProtection;
+#if ZEND_DEBUG
+	int inconsistent;
+#endif
+} HashTable;
+
+## _zend_array in PHP 8.3.36 (Zend/zend_types.h): flat arData + nNumUsed.
+		Bucket       *arData;   /* array of hash buckets */
+		zval         *arPacked; /* packed array of zvals */
+
+## Consequence: the PHP 5.3 design allocates a Bucket fully, THEN links it,
+## so an OOM during the add leaves nothing walkable by zend_hash_destroy
+## (which traverses pListHead, not a used-count). The 109618 primitive does
+## not exist in 5.3.15.
+
+## CVE-2026-109619 trigger (session.upload_progress) was introduced in PHP 5.4.0
+## (RFC: wiki.php.net/rfc/session_upload_progress); absent in 5.3.15 (0 occurrences).

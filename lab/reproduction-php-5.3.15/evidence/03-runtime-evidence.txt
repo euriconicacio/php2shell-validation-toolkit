@@ -1,0 +1,31 @@
+# Runtime evidence (containers, 2026-10-22 15:25 UTC)
+
+## Marker probe (CLI), php53lab:5.3.15:
+bool(false)
+upload_progress.enabled=bool(false)
+5.3.15 / cli
+
+## mod_php SAPI over HTTP:
+  (apache2handler confirmed earlier: 5.3.15|apache2handler, memory_hard_limit_percent=false, upload_progress=false)
+
+## memory_limit breach is fatal (bailout) and shutdown still runs, 5.3.15 CLI:
+Fatal error: Allowed memory size of 16777216 bytes exhausted (tried to allocate 1025 bytes) in /m.php on line 11
+SHUTDOWN ran. last_error=Allowed memory size of 16777216 bytes exhausted (tried to allocate 1025 bytes)
+
+## Differential reachability (7MB multipart field, memory_limit=2M, mod_php):
+=== differential: 7MB multipart text field, memory_limit=2M ===
+[5.3.15]
+  HTTP=500  body=
+  curl: 
+  php_err: [22-Oct-2026 15:25:38 UTC] PHP Fatal error:  Allowed memory size of 2097152 bytes exhausted (tried to allocate 1315584 bytes) in Unknown on line 0
+  apache: 
+[8.3.0-prefix]
+  HTTP=500  body=
+  curl: 
+  php_err: [22-Oct-2026 15:25:38 UTC] PHP Fatal error:  Allowed memory size of 2097152 bytes exhausted (tried to allocate 1695744 bytes) in Unknown on line 0
+  apache: 
+[8.3.36-fixed]
+  HTTP=500  body=
+  curl: 
+  php_err: [22-Oct-2026 15:25:38 UTC] PHP Fatal error:  Allowed memory size of 2097152 bytes exhausted (tried to allocate 2097152 bytes) in Unknown on line 0
+  apache: 

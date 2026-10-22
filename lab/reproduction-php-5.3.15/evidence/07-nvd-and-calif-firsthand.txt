@@ -1,0 +1,48 @@
+# CVE-2026-109618 — primary sources, fetched 2026-10-22
+
+## NVD (nvd.nist.gov, API 2.0) — vulnStatus "Modified"
+CVSS: NVD(primary) 3.1 = 9.8; PHP CNA(secondary) 4.0 = 9.2.
+Configurations (cpe:2.3:a:php:php:*), four OR'd cpeMatch entries:
+  1.  (no lower bound)  ->  < 8.2.35
+  2.  8.3.0            ->  < 8.3.36
+  3.  8.4.0            ->  < 8.4.27
+  4.  8.5.0            ->  < 8.5.12
+=> Entry 1 has NO versionStartIncluding. Read literally (as scanners do), it marks
+   EVERY php < 8.2.35 as vulnerable -- i.e. it sweeps in 7.x AND 5.x, including 5.3.15.
+   This is NVD's mechanical translation of the CNA's branch-only advisory (which gave
+   only upper bounds), not a researched determination that 5.x was tested/affected.
+   It is the over-broad "marking" that makes a scanner flag PHP 5.3.
+References: GHSA-w8hw-w9fx-j79w (PHP, Vendor Advisory); oss-security 2026/10/21/6; wiz.io/blog/php2shell-php-rce.
+
+## Calif (calif.io/php2shell) — read firsthand
+Primitive confirmed verbatim: in _zend_hash_str_add_or_update_i,
+    idx = ht->nNumUsed++;  ht->nNumOfElements++;
+  happen BEFORE
+    p->key = zend_string_init(str, len, persistent);
+  "Increasing nNumUsed makes the bucket visible to teardown, even if the subsequent
+   key allocation fatals." Consumer: zend_array_destroy() iterates ht->arData up to
+   ht->nNumUsed. Fields: nNumUsed, nNumOfElements, arData, zend_string_init.
+  => every field/function is PHP 7.0+ HashTable (phpng). Cannot exist pre-7.0.
+
+Calif's OWN version floors (two DIFFERENT mechanisms, two floors):
+  - hash-table nNumUsed RCE:         "RCE against ... mod_php and PHP >= 7.3"
+  - session upload_progress RCE:     "RCE against ... mod_php and PHP >= 5.4.0"
+  => The widely repeated "5.4.0 floor" is Calif's floor for the upload_progress
+     (CVE-2026-109619) path. Calif scopes the CVE-2026-109618 hash RCE to >= 7.3.
+  Calif gives NO rationale tying 5.4.0 to code, never mentions 5.3 or the 7.0 rewrite.
+
+## Our struct evidence (06) + the fix diff
+  nNumUsed/arData first appear at php-7.0.0; absent through php-5.6.40 (last 5.6).
+  zend_array_destroy absent at 5.6.40, present at 7.0.0.
+  Fix 31c0ea7d7 adds HASH_FALLIBLE variants in Zend/zend_hash.c (fallible add/update
+  that returns NULL instead of corrupting on OOM) -- operating on the nNumUsed HashTable.
+
+## Resolution
+CVE-2026-109618's demonstrated RCE primitive is PHP 7.x (>=7.0 structurally; Calif
+scopes the exploit to >=7.3). PHP 5.x -- the whole branch, not just 5.3 -- lacks the
+substrate. Corroborated by: (a) struct history, (b) Calif's own >=7.3 scoping,
+(c) firsthand primitive fields. The NVD CPE's unbounded entry 1 (< 8.2.35) is
+over-broad and is what wrongly implicates PHP 5.3; the "5.4+" of third-party posts is
+the upload_progress (109619) floor, mis-generalized to the whole pair.
+Caveat: proven for the DEMONSTRATED primitive; the general OOM-longjmp property exists
+in 5.x, and no source demonstrates an alternative 5.x path (none found).

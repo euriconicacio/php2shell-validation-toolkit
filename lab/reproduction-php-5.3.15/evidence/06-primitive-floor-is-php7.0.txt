@@ -1,0 +1,35 @@
+# CVE-2026-109618 documented primitive: substrate first appears at PHP 7.0.0
+# The whole PHP 5 branch lacks it — not just 5.3.
+# Method: git show <tag>:<file> on the official php-src blobless clone.
+
+HashTable struct across the PHP 5 -> 7 boundary (decisive marker = nNumUsed / arData):
+
+  tag            struct        file                   nNumUsed  arData  pListHead
+  php-5.3.15     _hashtable    Zend/zend_hash.h          no       no      yes
+  php-5.4.0      _hashtable    Zend/zend_hash.h          no       no      yes
+  php-5.4.45     _hashtable    Zend/zend_hash.h          no       no      yes
+  php-5.5.38     _hashtable    Zend/zend_hash.h          no       no      yes
+  php-5.6.0      _hashtable    Zend/zend_hash.h          no       no      yes
+  php-5.6.40     _hashtable    Zend/zend_hash.h          no       no      yes   <- last 5.6
+  php-7.0.0      _zend_array   Zend/zend_types.h         YES      YES     no    <- rewrite lands here
+  php-7.0.33     _zend_array   Zend/zend_types.h         YES      YES     no
+  php-8.3.36     _zend_array   Zend/zend_types.h         (union)  YES     no
+
+zend_array_destroy() (the consumer the primitive abuses):
+  php-5.6.40  absent (0 in Zend/zend_hash.h)
+  php-7.0.0   present (declared in Zend/zend_hash.h)
+
+Conclusion:
+- The documented CVE-2026-109618 primitive (increment nNumUsed before zend_string_init;
+  zend_array_destroy walks arData up to nNumUsed) requires the PHP 7.0 "phpng" HashTable
+  rewrite. Every PHP 5.x release, through the final 5.6.40, uses the old linked-list
+  HashTable and does not have it. The floor for this primitive is PHP 7.0, not 5.4.0.
+- The widely repeated "affects PHP 5.4+ / every PHP since 5.4" is therefore off by two
+  major versions for CVE-2026-109618's demonstrated path.
+
+Scope / caveats:
+- This is the DEMONSTRATED/documented primitive. It does not prove no other OOM-bailout
+  corruption path exists anywhere in PHP 5.x; the general property (OOM -> longjmp bailout)
+  is present in 5.x. No source has shown an alternative 5.x path.
+- CVE-2026-109619 is separate: its session.upload_progress trigger exists from 5.4.0, so
+  5.4-5.6 are NOT cleared of 109619 by this analysis (only 5.3.15 is, where it is absent).

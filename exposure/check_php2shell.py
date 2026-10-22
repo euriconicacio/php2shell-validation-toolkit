@@ -47,7 +47,7 @@ FIX_MARKER = "memory_hard_limit_percent"
 
 @dataclass
 class Verdict:
-    status: str   # VULNERABLE | PATCHED | UNKNOWN
+    status: str   # VULNERABLE | PATCHED | NOT-AFFECTED | UNKNOWN
     detail: str
 
 
@@ -61,6 +61,23 @@ def parse_version(text: str) -> tuple[int, int, int] | None:
 def judge_version(ver: tuple[int, int, int]) -> Verdict:
     major, minor, patch = ver
     branch = (major, minor)
+
+    if major < 7:
+        # CVE-2026-109618's corruption primitive is the PHP 7.0+ zend_array
+        # HashTable (nNumUsed / arData, walked by zend_array_destroy); it does
+        # not exist before 7.0. CVE-2026-109619's upload_progress trigger is
+        # 5.4+. So a build below 7.0 is not affected by the known 109618 vector
+        # on version alone. See docs/affected-versions.md.
+        note = ("For 5.4+, CVE-2026-109619 is reachable only if "
+                "session.upload_progress is enabled (configuration, not version)."
+                if branch >= (5, 4) else
+                "Below the floor of both CVEs.")
+        return Verdict(
+            "NOT-AFFECTED",
+            f"PHP {major}.{minor}.{patch} is below the CVE-2026-109618 floor "
+            f"(PHP 7.0, where the zend_array HashTable primitive begins). {note} "
+            f"End-of-life regardless — migrate.",
+        )
 
     if major < 8 or branch <= EOL_CEILING:
         advice = ("PHP published minimal source backports for 7.4-8.1: check "
@@ -200,9 +217,12 @@ def remote_fingerprint(url: str) -> Verdict:
     except Exception as exc:  # noqa: BLE001
         return Verdict("UNKNOWN", f"Request failed: {exc}")
 
-    banner = " ".join(v for k, v in headers.items()
-                      if k in ("x-powered-by", "server"))
-    ver = parse_version(banner)
+    # Extract the PHP version specifically, not the web server's. Prefer the
+    # X-Powered-By "PHP/x.y.z" token; fall back to a "PHP/x.y.z" anywhere in the
+    # headers. Never read the Server header's Apache/nginx version as the PHP one.
+    m = re.search(r"PHP/(\d+\.\d+\.\d+)", headers.get("x-powered-by", "")) \
+        or re.search(r"PHP/(\d+\.\d+\.\d+)", " ".join(headers.values()))
+    ver = parse_version(m.group(1)) if m else None
     if not ver:
         return Verdict(
             "UNKNOWN",
@@ -231,12 +251,12 @@ def main() -> int:
             return 2
         v = judge_version(ver)
         print(f"[{v.status}] {v.detail}")
-        return 0 if v.status == "PATCHED" else 1
+        return 0 if v.status in ("PATCHED", "NOT-AFFECTED") else 1
 
     if args.url:
         v = remote_fingerprint(args.url)
         print(f"[{v.status}] {args.url}: {v.detail}")
-        return 0 if v.status == "PATCHED" else 1
+        return 0 if v.status in ("PATCHED", "NOT-AFFECTED") else 1
 
     # Default: audit the local install.
     ver = local_php_version()
@@ -264,7 +284,7 @@ def main() -> int:
     print("Configuration audit:")
     for note in audit_config():
         print(f"  - {note}")
-    return 0 if v.status == "PATCHED" else 1
+    return 0 if v.status in ("PATCHED", "NOT-AFFECTED") else 1
 
 
 if __name__ == "__main__":

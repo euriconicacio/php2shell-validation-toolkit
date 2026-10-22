@@ -1,0 +1,11 @@
+# PHP 5.3.15 source provenance
+
+SHA-256 of php-5.3.15.tar.bz2 (museum.php.net):
+f9b725659e64228a60883bd134afe1f638900b6b8fa93ba98053095b0892f1ef  /private/tmp/claude-501/-Users-euriconicacio-Code-cve-hunter/e1a3ca9c-f818-4984-a4e2-72d712480d5a/scratchpad/php53lab/src/php-5.3.15.tar.bz2
+
+Tarball files vs git tag php-5.3.15 (byte comparison):
+  match  main/rfc1867.c
+  match  Zend/zend_alloc.c
+  match  main/main.c
+  match  main/SAPI.c
+  match  sapi/apache2handler/sapi_apache2.c
