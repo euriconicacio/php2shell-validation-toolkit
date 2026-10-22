@@ -31,7 +31,9 @@ case "${MAJOR}.${MINOR}" in
   8.4) [ "${PATCH:-0}" -lt "$FIXED_8_4" ] && verdict="VULNERABLE" || verdict="PATCHED" ;;
   8.5) [ "${PATCH:-0}" -lt "$FIXED_8_5" ] && verdict="VULNERABLE" || verdict="PATCHED" ;;
   *)
-    if [ "${MAJOR}" -lt 8 ] || { [ "${MAJOR}" -eq 8 ] && [ "${MINOR}" -le 1 ]; }; then
+    if [ "${MAJOR}" -lt 5 ] || { [ "${MAJOR}" -eq 5 ] && [ "${MINOR}" -lt 4 ]; }; then
+      verdict="PRECAUTION"  # below 5.4.0, the earliest affected code path
+    elif [ "${MAJOR}" -lt 8 ] || { [ "${MAJOR}" -eq 8 ] && [ "${MINOR}" -le 1 ]; }; then
       verdict="VULNERABLE"  # EOL, no release
     else
       echo "[UNKNOWN] No fixed-release data for branch ${MAJOR}.${MINOR}. Check the PHP advisory."
@@ -67,16 +69,23 @@ case "$verdict" in
       echo "[VULNERABLE] PHP ${VER} is end-of-life. No fix from PHP. Upgrade the branch."
     fi
     ;;
+  PRECAUTION)
+    echo "[REVIEW] PHP ${VER} is below 5.4.0, the earliest affected code path for PHP2Shell"
+    echo "         (per the advisory and the referenced write-up). No confirmed route applies"
+    echo "         at this version; session.upload_progress did not exist before 5.4. Pre-5.4"
+    echo "         is flagged only as a precaution — and is long EOL and unsafe: upgrade." ;;
   PATCHED) echo "[PATCHED] PHP ${VER} is at or above the fixed release for its branch." ;;
 esac
 
 echo "  Fix marker memory_hard_limit_percent: ${MARKER}"
 echo
 echo "Configuration audit (PHP CLI values; FPM pools and Apache may differ):"
-UP="$(php -r 'echo ini_get("session.upload_progress.enabled");' 2>/dev/null || echo '?')"
+UP="$(php -r '$v = ini_get("session.upload_progress.enabled"); echo $v === false ? "n/a" : $v;' 2>/dev/null || echo '?')"
 if [ "$UP" = "1" ]; then
   echo "  - session.upload_progress.enabled is ON (default) -> session case of CVE-2026-109619."
   echo "    Interim stopgap: set it to 0 in php.ini or the FPM pool (NOT .user.ini)."
+elif [ "$UP" = "n/a" ]; then
+  echo "  - session.upload_progress.enabled: n/a (directive absent; PHP < 5.4 — route does not exist)."
 else
   echo "  - session.upload_progress.enabled = '${UP}' (0/empty = stopgap in place)."
 fi
@@ -91,4 +100,8 @@ MEM="$(php -r 'echo ini_get("memory_limit");' 2>/dev/null || echo '?')"
 echo "  - memory_limit = ${MEM} (PHP's stopgap for CVE-2026-109618 is -1, with a DoS cost;"
 echo "    see mitigations/php.ini.hardening.ini)."
 
-[ "$verdict" = "PATCHED" ] && exit 0 || exit 1
+case "$verdict" in
+  PATCHED)    exit 0 ;;
+  PRECAUTION) exit 2 ;;  # not confirmed vulnerable to php2shell; review / upgrade anyway
+  *)          exit 1 ;;
+esac
