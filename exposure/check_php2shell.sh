@@ -31,9 +31,10 @@ case "${MAJOR}.${MINOR}" in
   8.4) [ "${PATCH:-0}" -lt "$FIXED_8_4" ] && verdict="VULNERABLE" || verdict="PATCHED" ;;
   8.5) [ "${PATCH:-0}" -lt "$FIXED_8_5" ] && verdict="VULNERABLE" || verdict="PATCHED" ;;
   *)
-    if [ "${MAJOR}" -lt 5 ] || { [ "${MAJOR}" -eq 5 ] && [ "${MINOR}" -lt 4 ]; }; then
-      verdict="PRECAUTION"  # below 5.4.0, the earliest affected code path
-    elif [ "${MAJOR}" -lt 8 ] || { [ "${MAJOR}" -eq 8 ] && [ "${MINOR}" -le 1 ]; }; then
+    if [ "${MAJOR}" -lt 8 ] || { [ "${MAJOR}" -eq 8 ] && [ "${MINOR}" -le 1 ]; }; then
+      # Includes pre-5.4: the session route (109619) is absent there, but the
+      # CVE-2026-109618 OOM/bailout preconditions are present in the 5.3 source
+      # (verified in rfc1867.c + zend_alloc.c), so treat as vulnerable.
       verdict="VULNERABLE"  # EOL, no release
     else
       echo "[UNKNOWN] No fixed-release data for branch ${MAJOR}.${MINOR}. Check the PHP advisory."
@@ -69,11 +70,6 @@ case "$verdict" in
       echo "[VULNERABLE] PHP ${VER} is end-of-life. No fix from PHP. Upgrade the branch."
     fi
     ;;
-  PRECAUTION)
-    echo "[REVIEW] PHP ${VER} is below 5.4.0, the earliest affected code path for PHP2Shell"
-    echo "         (per the advisory and the referenced write-up). No confirmed route applies"
-    echo "         at this version; session.upload_progress did not exist before 5.4. Pre-5.4"
-    echo "         is flagged only as a precaution — and is long EOL and unsafe: upgrade." ;;
   PATCHED) echo "[PATCHED] PHP ${VER} is at or above the fixed release for its branch." ;;
 esac
 
@@ -101,7 +97,6 @@ echo "  - memory_limit = ${MEM} (PHP's stopgap for CVE-2026-109618 is -1, with a
 echo "    see mitigations/php.ini.hardening.ini)."
 
 case "$verdict" in
-  PATCHED)    exit 0 ;;
-  PRECAUTION) exit 2 ;;  # not confirmed vulnerable to php2shell; review / upgrade anyway
-  *)          exit 1 ;;
+  PATCHED) exit 0 ;;
+  *)       exit 1 ;;
 esac
