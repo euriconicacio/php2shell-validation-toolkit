@@ -32,9 +32,22 @@ need_root() {
   fi
 }
 
+php_version() {
+  if command -v php >/dev/null 2>&1; then
+    php -r 'echo PHP_VERSION;' 2>/dev/null || echo "unknown"
+  else
+    echo "no-php-cli"
+  fi
+}
+
 current_setting() {
   if command -v php >/dev/null 2>&1; then
-    php -r 'echo ini_get("session.upload_progress.enabled") === "" ? "unset" : ini_get("session.upload_progress.enabled");' 2>/dev/null || echo "unknown"
+    # ini_get() returns false for a directive that does not exist. The
+    # session.upload_progress.* directives were only added in PHP 5.4, so on
+    # 5.3.x ini_get() is false (not "") — report that as n/a instead of blank.
+    php -r '$v = ini_get("session.upload_progress.enabled");
+            echo $v === false ? "n/a (directive absent; PHP < 5.4)"
+                 : ($v === "" ? "unset" : $v);' 2>/dev/null || echo "unknown"
   else
     echo "no-php-cli"
   fi
@@ -71,7 +84,15 @@ esac
 need_root
 
 echo "PHP2Shell quick-fix  ::  mode=${MODE}"
+echo "PHP version = $(php_version)"
 echo "Current session.upload_progress.enabled = $(current_setting)"
+# On PHP < 5.4 the session.upload_progress route does not exist, so this
+# stopgap has nothing to disable. Say so plainly: the fix there is upgrading PHP.
+if command -v php >/dev/null 2>&1 \
+   && ! php -r 'exit(version_compare(PHP_VERSION, "5.4.0", ">=") ? 0 : 1);' 2>/dev/null; then
+  warn "PHP < 5.4 detected: session.upload_progress does not exist here, so this"
+  warn "stopgap does not apply. These versions are long past EOL — upgrade PHP."
+fi
 echo
 
 # Portable read into array (avoids `mapfile`, absent on bash 3.2 / macOS).
