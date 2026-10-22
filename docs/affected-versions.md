@@ -39,7 +39,15 @@ vector", not "proven immune".)
 **CVE-2026-109619 (stale worker globals) — PHP 5.4+ for the upload-progress path.**
 Its main pre-auth trigger, `session.upload_progress`, was introduced in PHP 5.4.0,
 so it does not exist in 5.3 or earlier. The "5.4.0" floor Calif gives is for **this**
-path — not for 109618. The 8.5 fatal-error-backtrace route is 8.5-only.
+path — not for 109618. The 8.5 fatal-error-backtrace route is 8.5-only. Unlike
+109618, the dangling-globals *condition* here is memory-model-agnostic: it is present
+and structurally identical from `php-5.4.0` through 7.x (the upload-progress handler
+decodes the session before `modules_activated`, an OOM fatal skips the session
+RSHUTDOWN, and the next request consumes `PS(id)`/`PS(http_session_vars)` from the
+freed heap). Turning that UAF into RCE, however, relies on PHP 7.x object/allocator/
+`var_unserialize` internals and is not demonstrated on 5.x — so 5.4–5.6 carry the
+condition (if `session.upload_progress` is enabled) but their RCE exposure is
+uncertain. See `lab/reproduction-php-5.3.15/evidence/08-cve109619-floor-is-5.4.txt`.
 
 **The widely cited "affects PHP 5.4+ / every PHP since 5.4" conflates the two.** It
 is the 109619 upload-progress floor applied to the whole pair. For the headline RCE

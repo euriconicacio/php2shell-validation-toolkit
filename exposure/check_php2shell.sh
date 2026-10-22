@@ -79,7 +79,8 @@ case "$verdict" in
     echo "[NOT-AFFECTED] PHP ${VER} is below the CVE-2026-109618 floor (PHP 7.0, where the"
     echo "               zend_array HashTable primitive begins); not affected by the known"
     echo "               109618 vector on version alone. End-of-life regardless — migrate."
-    echo "               For 5.4+, 109619 depends on session.upload_progress (see below)."
+    echo "               On 5.4+, the 109619 dangling-globals condition can form if"
+    echo "               session.upload_progress is on (see below); its demonstrated RCE is 7.x."
     ;;
 esac
 

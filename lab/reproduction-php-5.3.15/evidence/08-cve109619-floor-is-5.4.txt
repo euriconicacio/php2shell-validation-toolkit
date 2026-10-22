@@ -1,0 +1,41 @@
+# CVE-2026-109619 (stale worker globals, session.upload_progress route) — floor is 5.4.0
+# Cross-version source read of ext/session/session.c + php_session.h + main/main.c
+# at php-5.4.0, php-5.6.40, php-7.0.0 (verified against cached GitHub-raw copies).
+
+VERDICT (B): the dangling-pointer UAF CONDITION forms in PHP 5.4-5.6 exactly as in 7.0;
+             reaching RCE from it is PHP-7.x-specific and undemonstrated on 5.x.
+
+Why the condition forms from 5.4.0 (not 7.x):
+- session.upload_progress and its rfc1867 callback (php_session_rfc1867_callback ->
+  php_session_rfc1867_update -> php_session_initialize -> php_session_decode) exist
+  from php-5.4.0. The callback decodes the session during request STARTUP.
+- main/main.c (5.6.40): sapi_activate (POST/rfc1867 fires here, :1648) runs BEFORE
+  zend_activate_modules / PG(modules_activated)=1 (:1686-1687). Request shutdown gates
+  all module RSHUTDOWNs on `if (PG(modules_activated))` (:1866). So an OOM fatal during
+  the early decode leaves modules_activated=0 -> session RSHUTDOWN
+  (php_rshutdown_session_globals) is SKIPPED -> PS(id)/PS(http_session_vars) dangle
+  into the per-request emalloc heap that is then torn down.
+- PS(id)=estrndup(...) and PS(http_session_vars)=MAKE_STD_ZVAL/array_init are per-request
+  heap allocations (session-5.6.40.c:1459/193). The next upload-progress request's
+  MULTIPART_EVENT_END handler consumes the stale globals: php_session_track_init does
+  zval_ptr_dtor(&PS(http_session_vars)) on the freed zval (:190) = UAF; and
+  php_rshutdown_session_globals efree(PS(id)) on the stale pointer (:117).
+- Structurally identical at 5.4.0, 5.6.40, 7.0.0. (5.4.0 is weaker still: it efree(PS(id))
+  without PS(id)=NULL, so it dangles even on the normal path.)
+- Below 5.4: session.upload_progress does not exist (introduced 5.4.0; 0 occurrences in
+  5.3.15), so the route is absent. No other pre-auth route is demonstrated below 5.4.
+
+Why RCE is 7.x-specific:
+- Global representation differs: 5.x char* id / zval* http_session_vars over ZE2
+  linked-list HashTable + old object store; 7.x zend_string* id / inline zval over packed
+  zend_array. The stale zval_ptr_dtor/efree touches different layouts.
+- Allocator differs: UAF->RCE needs deterministic reclaim with controlled bytes; rides on
+  PHP 7 zend_mm size-class bins, not 5.x ZendMM.
+- The published calif.io/php2shell chain uses 7.x var_unserialize (used_slots), zend_string
+  and 7.x object/__wakeup handling. No evidence the 5.x UAF is practically exploitable to
+  RCE without independent 5.x-specific exploit development.
+
+Consequence for the NVD lower bound:
+- CVE-2026-109619 floor = 5.4.0 (condition + only pre-auth route begin there). 5.3 and
+  earlier are out. 5.4-5.6 carry the UAF condition (keep them in range); demonstrated RCE
+  is 7.x-specific. Do NOT request 7.0 for 109619 (unlike 109618).

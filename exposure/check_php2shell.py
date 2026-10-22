@@ -68,8 +68,9 @@ def judge_version(ver: tuple[int, int, int]) -> Verdict:
         # not exist before 7.0. CVE-2026-109619's upload_progress trigger is
         # 5.4+. So a build below 7.0 is not affected by the known 109618 vector
         # on version alone. See docs/affected-versions.md.
-        note = ("For 5.4+, CVE-2026-109619 is reachable only if "
-                "session.upload_progress is enabled (configuration, not version)."
+        note = ("For 5.4+, the CVE-2026-109619 dangling-globals condition can form "
+                "if session.upload_progress is enabled (config, not version); its "
+                "demonstrated RCE, however, is PHP 7.x-specific."
                 if branch >= (5, 4) else
                 "Below the floor of both CVEs.")
         return Verdict(
