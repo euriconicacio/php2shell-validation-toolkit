@@ -1,0 +1,48 @@
+# NVD CPE correction for CVE-2026-109618 and CVE-2026-109619, fetched 2026-10-23T20:32Z
+# Source: services.nvd.nist.gov/rest/json/cves/2.0 and /cvehistory/2.0 (php:php entries only)
+# Request: correction e-mail to nvd@nist.gov, 2026-10-22, asking for versionStartIncluding
+#          7.0.0 (109618) and 5.4.0 (109619) on the oldest range. NVD replied 2026-10-23.
+
+## CVE-2026-109618
+Current (lastModified 2026-10-23T16:26:54.713, vulnStatus Analyzed):
+  7.3.0      -> < 8.2.35
+  8.3.0      -> < 8.3.36
+  8.4.0      -> < 8.4.27
+  8.5.0      -> < 8.5.12
+History: 2026-10-23T16:26:54.713  Modified Analysis  (source nvd@nist.gov)
+  before:
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions up to (excluding) 8.2.35
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions from (including) 8.3.0 up to (excluding) 8.3.36
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions from (including) 8.4.0 up to (excluding) 8.4.27
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions from (including) 8.5.0 up to (excluding) 8.5.12
+  after:
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions from (including) 8.3.0 up to (excluding) 8.3.36
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions from (including) 8.4.0 up to (excluding) 8.4.27
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions from (including) 8.5.0 up to (excluding) 8.5.12
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions from (including) 7.3.0 up to (excluding) 8.2.35
+
+## CVE-2026-109619
+Current (lastModified 2026-10-23T16:06:48.917, vulnStatus Analyzed):
+  5.4.0      -> < 8.2.35
+  8.3.0      -> < 8.3.36
+  8.4.0      -> < 8.4.27
+  8.5.0      -> < 8.5.12
+History: 2026-10-23T13:22:44.657  Modified Analysis  (source nvd@nist.gov)
+  before:
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions up to (excluding) 8.2.35
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions from (including) 8.3.0 up to (excluding) 8.3.36
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions from (including) 8.4.0 up to (excluding) 8.4.27
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions from (including) 8.5.0 up to (excluding) 8.5.12
+  after:
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions from (including) 8.3.0 up to (excluding) 8.3.36
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions from (including) 8.4.0 up to (excluding) 8.4.27
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions from (including) 8.5.0 up to (excluding) 8.5.12
+    *cpe:2.3:a:php:php:*:*:*:*:*:*:*:* versions from (including) 5.4.0 up to (excluding) 8.2.35
+
+## Reading
+- 109619: floor set to 5.4.0, as requested (session.upload_progress, see 08).
+- 109618: floor set to 7.3.0, not the requested 7.0.0. 7.0.0 is the structural floor (06:
+  nNumUsed/arData/zend_array_destroy first appear there); 7.3.0 matches Calif's scoping of
+  the hash-table RCE (07) and is the tighter bound. The two are consistent: this lab rules
+  out everything below 7.0 and makes no claim about 7.0-7.2.
+- The 8.3 / 8.4 / 8.5 ranges are unchanged.

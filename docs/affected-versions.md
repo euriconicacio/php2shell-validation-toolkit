@@ -54,13 +54,22 @@ is the 109619 upload-progress floor applied to the whole pair. For the headline 
 (109618) the real floor is PHP 7.x; PHP 5.x is implicated only by the 109619
 upload-progress path (5.4+), and not at all on 5.3.
 
-**NVD caveat.** The NVD CPE configuration for CVE-2026-109618 lists its oldest range
-as `cpe:…:php:php:*` up to `< 8.2.35` with **no lower bound** (`versionStartIncluding`
-absent). A scanner reads that as "every PHP below 8.2.35" and sweeps in 7.x and 5.x.
-That is a mechanical translation of the branch-only advisory, not a determination
-that 5.x was tested or is affected — and it is the usual reason a scanner flags an
-EOL PHP 5.x host for 109618. See `lab/reproduction-php-5.3.15/` for the source and
-lab evidence that 5.3.15 does not carry the primitive.
+**NVD caveat (corrected 2026-10-23).** At first, the NVD CPE configuration of both CVEs
+listed the oldest range as `cpe:…:php:php:*` up to `< 8.2.35` with **no lower bound**
+(`versionStartIncluding` absent). A scanner reads that as "every PHP below 8.2.35" and
+sweeps in 7.x and 5.x. That was a mechanical translation of the branch-only advisory,
+not a determination that 5.x was tested or affected. After a correction request with
+the evidence in `lab/reproduction-php-5.3.15/`, NVD revised both records on 2026-10-23:
+
+| CVE | Oldest range before | Oldest range now |
+| --- | --- | --- |
+| CVE-2026-109618 | `< 8.2.35` | `>= 7.3.0, < 8.2.35` |
+| CVE-2026-109619 | `< 8.2.35` | `>= 5.4.0, < 8.2.35` |
+
+For 109618 the request was 7.0.0, the structural floor. NVD chose 7.3.0, which matches
+Calif's scoping of the hash-table RCE; the two are consistent. A scanner that still
+flags PHP 5.x for either CVE, or 7.0–7.2 for 109618, is reading a feed older than the
+correction. See `lab/reproduction-php-5.3.15/evidence/09-nvd-correction-2026-10-23.txt`.
 
 ## Distribution packages keep their version number
 

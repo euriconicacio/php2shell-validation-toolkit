@@ -92,6 +92,11 @@ proves reachability, never the corruption, on any build.
   hash-table RCE to **PHP ≥ 7.3** (the "5.4.0" everyone repeats is their floor for
   the *upload_progress* path, CVE-2026-109619), and the NVD CPE's unbounded oldest
   range (`< 8.2.35`, no lower bound) is why scanners false-positive PHP 5.x.
+- `evidence/08-cve109619-floor-is-5.4.txt` — the 109619 floor: `session.upload_progress`
+  and the stale-globals condition begin at 5.4.0.
+- `evidence/09-nvd-correction-2026-10-23.txt` — NVD revised both CPE configurations on
+  2026-10-23 after a correction request built on this evidence: 109618 now starts at
+  `>= 7.3.0`, 109619 at `>= 5.4.0`. The unbounded range in `07` is the earlier state.
 
 ## Reproduce
 
